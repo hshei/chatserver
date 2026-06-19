@@ -14,6 +14,8 @@
 
 #include "server.h"
 #include "client.h"
+#include "protocol.h"
+#include "handler.h"
 #include "datastructures.h"
 
 #define PORT "8888"
@@ -100,8 +102,26 @@ int server_run(server_s *server){
         for (int i = 0; i < n; i++){
             int fd = events[i].ident;
 
-            if (events[i].flags & EV_EOF){
-                // THe client disconnected
+            if (events[i].flags & EV_EOF) {
+                // read any remaining data
+                printf("DEBUG: EV_EOF for fd %d\n", fd);
+                char buf[BUF_SIZE];
+                int nbytes = recv(fd, buf, BUF_SIZE - 1, 0);
+                printf("DEBUG: EV_EOF recv got %d bytes\n", nbytes);
+                if (nbytes > 0) {
+                    client_s client;
+                    hm_get(server->clients, &fd, &client);
+                    memcpy(client.buf + client.buf_len, buf, nbytes);
+                    client.buf_len += nbytes;
+
+                    uint8_t type;
+                    uint32_t payload_len;
+                    char payload[512];
+                    while (protocol_parse_frame(&client, &type, &payload_len, payload) == 1) {
+                        payload[payload_len] = '\0';
+                        handle_message(server, fd, type, payload_len, payload);
+                    }
+                }
                 close(fd);
                 hm_remove(server->clients, &fd);
                 printf("Removed Client with fd: %d successfully\n", fd);
@@ -126,14 +146,26 @@ int server_run(server_s *server){
                 // getting the data of the client
                 char buf[BUF_SIZE];
                 int nbytes = recv(fd, buf, BUF_SIZE - 1, 0);
-                if (nbytes == -1){ 
-                    perror("recv");
-                    continue;
+                if (nbytes == -1) { perror("recv"); continue; }
+                
+                printf("DEBUG: recv event for fd %d, got %d bytes\n", fd, nbytes);
+
+                client_s client;
+                hm_get(server->clients, &fd, &client);
+                memcpy((client.buf + client.buf_len), buf, nbytes);
+                client.buf_len += nbytes;
+                // getting the frames from the client buffer
+                uint8_t type;
+                uint32_t payload_len;
+                char payload[512];
+                printf("DEBUG: buf_len before parse loop: %zu\n", client.buf_len);
+                while (protocol_parse_frame(&client, &type, &payload_len, payload) == 1){
+                    payload[payload_len] = '\0';
+                    printf("parsing the message\n");
+                    handle_message(server, fd, type, payload_len, payload);
                 }
-                buf[nbytes] = '\0';
-                printf("Got the following string (%s) from fd: %d\n", buf, fd);
-                // sending back to cient
-                if (send(fd, buf, nbytes, 0) == -1) perror("send");
+                // hm_get gives a copy of the data, so a manual update is required
+                hm_insert(server->clients, &fd, &client);
             }
         }
     }
