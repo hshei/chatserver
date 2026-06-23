@@ -1,4 +1,7 @@
 datastructures/
 server.dSYM/
 client.dSYM/
-.vscode/
+.vscode/ 
+chatserver
+test-client
+a.out
