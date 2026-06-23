@@ -2,6 +2,7 @@ datastructures/
 server.dSYM/
 client.dSYM/
 .vscode/ 
+chat.db
 chatserver
 test-client
 a.out

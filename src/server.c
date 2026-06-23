@@ -16,7 +16,9 @@
 #include "client.h"
 #include "protocol.h"
 #include "handler.h"
+#include "db.h"
 #include "datastructures.h"
+
 
 #define PORT "8888"
 #define BACKLOG 10
@@ -88,6 +90,7 @@ void server_init(server_s **server_out){
     server->kq = kqueue();
     server->listener_fd = get_listener_socket();
     add_to_kqueue(server->kq, server->listener_fd);
+    db_init(&server->db);
     
     *server_out = server;
 }
@@ -137,11 +140,9 @@ int server_run(server_s *server){
                 uint8_t type;
                 uint32_t payload_len;
                 char payload[512];
-                printf("DEBUG: buf_len before parse loop: %zu\n", client.buf_len);
                 while (protocol_parse_frame(&client, &type, &payload_len, payload) == 1){
                     payload[payload_len] = '\0';
-                    printf("parsing the message\n");
-                    handle_message(type, payload_len, payload, &client);
+                    handle_message(server, type, payload_len, payload, &client);
                 }
                 // hm_get gives a copy of the data, so a manual update is required
                 hm_insert(server->clients, &fd, &client);

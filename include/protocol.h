@@ -14,6 +14,9 @@ typedef enum {
     CHAT_LIST_ROOMS   = 0x07,
     CHAT_HISTORY      = 0x08,
     CHAT_DM           = 0x09,
+
+    CHAT_NEW_MSG      = 0x83,
+    CHAT_DM_MSG       = 0x89,
 } msg_type_t;
 
 

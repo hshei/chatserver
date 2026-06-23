@@ -1,12 +1,14 @@
 #ifndef SERVER_H
 #define SERVER_H
 
+#include <sqlite3.h>
 #include "datastructures.h"
 
 typedef struct server_s {
     int kq;
     int listener_fd;
     hashmap_s *clients;
+    sqlite3 *db;
 } server_s;
 
 int get_listener_socket(void);

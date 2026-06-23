@@ -10,6 +10,8 @@ typedef struct {
     char buf[4096];
     char username[32];
     char room[32];
+    int user_id;
+    int room_id;
     size_t buf_len;
 } client_s;
 
