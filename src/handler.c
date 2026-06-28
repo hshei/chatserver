@@ -8,6 +8,7 @@
 #include "server.h"
 #include "client.h"
 #include "db.h"
+#include "auth.h"
 #include "datastructures.h"
 #include "cJSON.h"
 
@@ -45,14 +46,39 @@ static void dm_callback(const void *key, const void *value, void *user_data){
 
 void handle_login(server_s *server, const char *payload, client_s *client){
     cJSON *json = cJSON_Parse(payload);
-    cJSON *username_json = cJSON_GetObjectItem(json, "username");
-    char *username = username_json->valuestring;
+    char *username = cJSON_GetObjectItem(json, "username")->valuestring;
+    char *password = cJSON_GetObjectItem(json, "password")->valuestring;
 
-    memcpy(client->username, username, strlen(username));
-    client->username[strlen(username)] = '\0';
-
-    client->user_id = db_insert_user(server->db, client->username);
-    printf("This is the username of the client of fd (%d): %s\n", client->fd, client->username);
+    // checking if the user already logged in
+    int frame_size;
+    char resp[5];
+    char stored_hash[65];
+    if (db_get_password(server->db, username, stored_hash) == 0){
+        // user exists
+        if (auth_verify_password(password, stored_hash)){
+            // correct password
+            strncpy(client->username, username, sizeof(client->username) - 1);
+            client->username[sizeof(client->username) - 1] = '\0';  
+            client->user_id = db_insert_user(server->db, username, stored_hash);
+            frame_size = protocol_build_frame(CHAT_LOGIN_OK, 0, "",resp);
+            send(client->fd, resp, frame_size, 0);
+        } else {
+            // wrong password
+            frame_size = protocol_build_frame(CHAT_LOGIN_FAIL, 0, "", resp);
+            send(client->fd, resp, frame_size, 0);
+            cJSON_Delete(json);
+            return;
+        }
+    } else {
+        // user doesn't exist
+        strncpy(client->username, username, sizeof(client->username) - 1);
+        client->username[sizeof(client->username) - 1] = '\0';  
+        char hashed_pass[65]; auth_hash_password(password, hashed_pass);
+        client->user_id = db_insert_user(server->db, client->username, hashed_pass);
+        printf("This is the username of the client of fd (%d): %s\n", client->fd, client->username);
+        frame_size = protocol_build_frame(CHAT_LOGIN_OK, 0, "", resp);
+        send(client->fd, resp, frame_size, 0);
+    }
 
     cJSON_Delete(json);
 }
@@ -92,7 +118,7 @@ void handle_send(server_s *server, const char *payload, client_s *client){
     char *resp_str = cJSON_PrintUnformatted(resp);
     uint32_t resp_len = strlen(resp_str);
     char *frame_buf = calloc(1, 5 + resp_len);
-    context.frame_size = protocol_build_frame(CHAT_NEW_MSG, strlen(resp_str), resp_str, frame_buf);
+    context.frame_size = protocol_build_frame(CHAT_SEND, strlen(resp_str), resp_str, frame_buf);
     context.frame = frame_buf;
 
     hm_foreach(server->clients, send_callback, &context);
@@ -119,7 +145,7 @@ void handle_dm(server_s *server, const char*payload, client_s *client){
     char *resp_str = cJSON_PrintUnformatted(resp);
     uint32_t resp_len = strlen(resp_str);
     char *frame_buf = calloc(1, 5 + resp_len);
-    context.frame_size = protocol_build_frame(CHAT_DM_MSG, resp_len, resp_str, frame_buf);
+    context.frame_size = protocol_build_frame(CHAT_DM, resp_len, resp_str, frame_buf);
     context.frame = frame_buf;
 
     hm_foreach(server->clients, dm_callback, &context);
@@ -127,9 +153,81 @@ void handle_dm(server_s *server, const char*payload, client_s *client){
     free(resp_str);
     cJSON_Delete(json);
     cJSON_Delete(resp);
-
 }
 
+void handle_edit(server_s *server, const char *payload, client_s *client){
+    cJSON *json = cJSON_Parse(payload); 
+    int msg_id = cJSON_GetObjectItem(json, "msg_id")->valueint;
+    char *new_text = cJSON_GetObjectItem(json, "text")->valuestring;
+    db_edit_message(server->db, new_text, msg_id, client->user_id);
+
+    // building the edit response
+    cJSON *resp = cJSON_CreateObject();
+    cJSON_AddStringToObject(resp, "from", client->username);
+    cJSON_AddStringToObject(resp, "room", client->room);
+    cJSON_AddStringToObject(resp, "text", new_text);
+    cJSON_AddNumberToObject(resp, "msg_id", msg_id);
+
+    // broadcasting the frame
+    broadcast_ctx context;
+    context.room = client->room;
+    context.sender_fd = client->fd;
+    char *resp_str = cJSON_PrintUnformatted(resp);
+    uint32_t resp_len = strlen(resp_str);
+    char *frame_buf = calloc(1, 5 + resp_len);
+    context.frame_size = protocol_build_frame(CHAT_MSG_EDITED, strlen(resp_str), resp_str, frame_buf);
+    context.frame = frame_buf;
+
+    // broadcasting the edit to the room
+    hm_foreach(server->clients, send_callback, &context);
+    free(frame_buf);
+    free(resp_str);
+    cJSON_Delete(json);
+    cJSON_Delete(resp);
+}
+
+void handle_delete(server_s *server, const char *payload, client_s *client){
+    cJSON *json = cJSON_Parse(payload);
+    int msg_id = cJSON_GetObjectItem(json, "msg_id")->valueint;
+    db_delete_message(server->db, msg_id, client->user_id);
+
+     // building the delete response
+    cJSON *resp = cJSON_CreateObject();
+    cJSON_AddStringToObject(resp, "from", client->username);
+    cJSON_AddStringToObject(resp, "room", client->room);
+    cJSON_AddNumberToObject(resp, "msg_id", msg_id);
+
+    // broadcasting the frame
+    broadcast_ctx context;
+    context.room = client->room;
+    context.sender_fd = client->fd;
+    char *resp_str = cJSON_PrintUnformatted(resp);
+    uint32_t resp_len = strlen(resp_str);
+    char *frame_buf = calloc(1, 5 + resp_len);
+    context.frame_size = protocol_build_frame(CHAT_MSG_DELETED, resp_len, resp_str, frame_buf);
+    context.frame = frame_buf;
+
+    // broadcasting the delete to the room
+    hm_foreach(server->clients, send_callback, &context);
+    free(frame_buf);
+    free(resp_str);
+    cJSON_Delete(json);
+    cJSON_Delete(resp);
+}
+
+void handle_history(server_s *server, client_s *client){
+    cJSON *msg_json_arr = db_get_history(server->db, client->room_id, 50);
+
+    char *msg_str = cJSON_PrintUnformatted(msg_json_arr);
+    uint32_t msg_len = strlen(msg_str);
+    char *msg_buf = calloc(1, 5 + msg_len);
+    int frame_size = protocol_build_frame(CHAT_HISTORY_RESP, msg_len, msg_str, msg_buf);
+
+    send(client->fd, msg_buf, frame_size, 0);
+    free(msg_buf);
+    free(msg_str);
+    cJSON_Delete(msg_json_arr);
+}
 
 void handle_message(server_s *server, uint8_t type, uint32_t payload_len, const char *payload, client_s *client){
     printf("DEBUG: entering the handle_message_function with the type of: %d\n", type);
@@ -139,5 +237,8 @@ void handle_message(server_s *server, uint8_t type, uint32_t payload_len, const 
         case CHAT_JOIN_ROOM: handle_join_room(server, payload, client); break;
         case CHAT_SEND: handle_send(server, payload, client); break;
         case CHAT_DM: handle_dm(server, payload, client); break;
+        case CHAT_EDIT: handle_edit(server, payload, client); break;
+        case CHAT_DELETE: handle_delete(server, payload, client); break;
+        case CHAT_HISTORY: handle_history(server, client); break;
     }
 }
