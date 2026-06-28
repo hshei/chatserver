@@ -118,7 +118,7 @@ void handle_send(server_s *server, const char *payload, client_s *client){
     char *resp_str = cJSON_PrintUnformatted(resp);
     uint32_t resp_len = strlen(resp_str);
     char *frame_buf = calloc(1, 5 + resp_len);
-    context.frame_size = protocol_build_frame(CHAT_SEND, strlen(resp_str), resp_str, frame_buf);
+    context.frame_size = protocol_build_frame(CHAT_NEW_MSG, strlen(resp_str), resp_str, frame_buf);
     context.frame = frame_buf;
 
     hm_foreach(server->clients, send_callback, &context);
@@ -145,7 +145,7 @@ void handle_dm(server_s *server, const char*payload, client_s *client){
     char *resp_str = cJSON_PrintUnformatted(resp);
     uint32_t resp_len = strlen(resp_str);
     char *frame_buf = calloc(1, 5 + resp_len);
-    context.frame_size = protocol_build_frame(CHAT_DM, resp_len, resp_str, frame_buf);
+    context.frame_size = protocol_build_frame(CHAT_DM_MSG, resp_len, resp_str, frame_buf);
     context.frame = frame_buf;
 
     hm_foreach(server->clients, dm_callback, &context);
@@ -230,7 +230,6 @@ void handle_history(server_s *server, client_s *client){
 }
 
 void handle_message(server_s *server, uint8_t type, uint32_t payload_len, const char *payload, client_s *client){
-    printf("DEBUG: entering the handle_message_function with the type of: %d\n", type);
     switch (type)
     {
         case CHAT_LOGIN:    handle_login(server, payload, client); break;

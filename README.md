@@ -61,7 +61,7 @@ Start the server:
 In separate terminals, start one or more clients:
 
 ```bash
-./test-client
+./chatclient
 ```
 
 ### Client Commands
@@ -125,7 +125,8 @@ See [`schema.sql`](schema.sql) for the full schema. Four tables:
 - **messages** — id, user, room, text, soft-delete flag, timestamps
 - **direct_messages** — id, sender, recipient, text
 
-## Platform
+## TODO
 
-Currently macOS only (kqueue, CommonCrypto). Linux support (epoll, OpenSSL) planned.
- 
+- Enforce login before allowing other commands (join, send, etc.)
+- Add `/rooms` command to list available rooms
+- Linux support (epoll, OpenSSL)

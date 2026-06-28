@@ -4,5 +4,5 @@ client.dSYM/
 .vscode/ 
 chat.db
 chatserver
-test-client
+chatclient
 a.out
