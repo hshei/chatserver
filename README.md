@@ -16,14 +16,14 @@ A multi-client chat server and interactive terminal client written in C. Built f
 ``` txt
 ┌──────────────┐         ┌──────────────────────────────────┐
 │    Client    │◄──TCP──►│             Server               │
-│  (kqueue:    │         │  kqueue event loop                │
+│  (kqueue:    │         │  kqueue event loop               │
 │   stdin +    │         │  ┌────────────┐ ┌──────────────┐ │
-│   socket)    │         │  │  Protocol   │ │   Handler    │ │
-└──────────────┘         │  │  (framing)  │ │  (dispatch)  │ │
+│   socket)    │         │  │  Protocol   │ │   Handler   │ │
+└──────────────┘         │  │  (framing)  │ │  (dispatch) │ │
                          │  └────────────┘ └──────┬───────┘ │
                          │  ┌────────────┐ ┌──────┴───────┐ │
-                         │  │    Auth     │ │   SQLite DB  │ │
-                         │  │  (SHA-256)  │ │              │ │
+                         │  │    Auth     │ │   SQLite DB │ │
+                         │  │  (SHA-256)  │ │             │ │
                          │  └────────────┘ └──────────────┘ │
                          └──────────────────────────────────┘
 ```
