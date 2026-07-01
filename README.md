@@ -1,4 +1,5 @@
 # Chat Server
+![build](https://github.com/hshei/chatserver/actions/workflows/build.yml/badge.svg)
 
 A multi-client chat server and interactive terminal client written in C. Built from scratch with kqueue for event-driven I/O, a custom binary wire protocol, SQLite for persistence, and SHA-256 password hashing.
 
