@@ -12,6 +12,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Install SQLite
+        run: brew install sqlite
+
       - name: Build server
         run: make
 

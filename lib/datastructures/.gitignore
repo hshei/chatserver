@@ -1,0 +1,16 @@
+# Build artifacts
+build/
+*.o
+*.a
+*.so
+*.dylib
+vector_test
+a.out
+
+# Editor files
+*.swp
+*.swo
+.DS_Store
+
+# Notes
+.notes.md
